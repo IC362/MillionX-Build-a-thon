@@ -30,7 +30,6 @@ The engine is built on a modular, plug-and-play framework:
 While launched in Bangladesh, the architecture is designed to scale across **South Asia, Africa, and LATAM**. By supporting local dialects and integrating with regional payment gateways, CommerceGPT aims to uplift SME productivity and contribute to significant GDP growth in emerging markets.
 
 ---
-© 2026 CommerceGPT Engine | Empowering the Next Billion Merchants.
 
 ## Run Locally
 
