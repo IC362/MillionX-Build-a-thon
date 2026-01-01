@@ -1,0 +1,5 @@
+{
+  "name": "Lavande's TrackSmart BI Dashboard",
+  "description": "An intelligent e-commerce dashboard for SMEs that unifies sales and customer interaction data. Features automated trend detection, anomaly alerts, and actionable AI insights powered by Gemini.",
+  "requestFramePermissions": []
+}
