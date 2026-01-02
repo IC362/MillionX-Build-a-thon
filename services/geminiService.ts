@@ -1,131 +1,111 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
-import { SaleRecord, InteractionRecord, AIAnalysisResult } from "../types";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
 
-// Correctly initialize GoogleGenAI with a named parameter using process.env.API_KEY directly.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-const getContextStrings = (sales: any, interactions: any) => {
-  const salesSummary = typeof sales === 'string' 
-    ? sales 
-    : Array.isArray(sales) ? sales.map((s: any) => `${s.date}: $${s.amount}`).join(', ') : JSON.stringify(sales);
-  
-  const interactionSummary = typeof interactions === 'string'
-    ? interactions
-    : Array.isArray(interactions) ? interactions.map((i: any) => `${i.timestamp} (${i.sentiment}): ${i.query}`).join(', ') : JSON.stringify(interactions);
-
-  return { salesSummary, interactionSummary };
+export const getChatResponse = async (message: string, lang: 'en' | 'bn', context: string) => {
+  const model = ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: message,
+    config: {
+      systemInstruction: `You are a helpful SME business assistant for a shopkeeper in Bangladesh. 
+      
+      CURRENT LANGUAGE MODE: ${lang === 'bn' ? 'BANGLA' : 'ENGLISH'}.
+      YOU MUST RESPOND EXCLUSIVELY IN ${lang === 'bn' ? 'BANGLA' : 'ENGLISH'}.
+      
+      CRITICAL GUIDELINES FOR BANGLA:
+      1. Use simple, rural-shopkeeper friendly Bangla (avoid complex academic words).
+      2. For stock queries, use this format: "বর্তমানে আপনার [Product Name] পণ্যের [Count] ইউনিট স্টকে আছে। এই পরিমাণটি [Status] হিসেবে চিহ্নিত করা হয়েছে।"
+      3. For warnings: "সতর্কতা: [Product Name] পণ্যের স্টক প্রায় শেষ। এখন অর্ডার না করলে বিক্রি হারানোর সম্ভাবনা আছে।"
+      4. For health insights: "আপনার ব্যবসায় বর্তমানে ইনভেন্টরি ব্যবস্থাপনায় সমস্যা দেখা যাচ্ছে। পরামর্শ: দ্রুত বিক্রিত পণ্যের জন্য আগাম অর্ডার পরিকল্পনা করুন।"
+      5. Always be proactive and suggest actions like reordering or checking suppliers.
+      
+      Here is the current business context (Inventory Data): ${context}`,
+    },
+  });
+  return (await model).text;
 };
 
-export const getAIInsights = async (
-  sales: SaleRecord[] | string,
-  interactions: InteractionRecord[] | string,
-  language: 'en' | 'bn' = 'en'
-): Promise<AIAnalysisResult> => {
-  const { salesSummary, interactionSummary } = getContextStrings(sales, interactions);
+export const extractInvoiceData = async (base64Image: string) => {
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: [
+      {
+        inlineData: {
+          mimeType: "image/jpeg",
+          data: base64Image,
+        },
+      },
+      {
+        text: "Extract products from this invoice. Return JSON with format: [{name: string, category: string, price: number, quantity: number}]. Only return JSON.",
+      },
+    ],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            category: { type: Type.STRING },
+            price: { type: Type.NUMBER },
+            quantity: { type: Type.NUMBER },
+          },
+          required: ["name", "category", "price", "quantity"]
+        }
+      }
+    }
+  });
+  return JSON.parse(response.text || "[]");
+};
 
-  const languageInstruction = language === 'bn' 
-    ? "Please provide the summary, anomalies, and recommendations in Bangla language. The forecast dates should be strings like YYYY-MM-DD." 
-    : "Please provide everything in English.";
+export const generateVoiceInsight = async (text: string, lang: 'en' | 'bn') => {
+  const voiceName = lang === 'bn' ? 'Kore' : 'Zephyr';
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash-preview-tts",
+    contents: [{ parts: [{ text: text }] }],
+    config: {
+      responseModalities: [Modality.AUDIO],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName },
+        },
+      },
+    },
+  });
 
-  const prompt = `Analyze this e-commerce SME data:
-  Recent Sales Data: ${salesSummary}
-  Customer Interaction Data: ${interactionSummary}
-  
-  Please identify:
-  1. A brief executive summary of performance.
-  2. Any clear anomalies (spikes or drops) found in the provided records.
-  3. Actionable business recommendations tailored to this specific input.
-  4. A simple daily forecast for the next 5 days based on trends.
-  
-  ${languageInstruction}
-  Format the response strictly as a JSON object with the keys: summary (string), anomalies (array of strings), recommendations (array of strings), and forecast (array of objects with date and predictedValue).`;
+  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  if (base64Audio) {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    const binaryString = atob(base64Audio);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    const dataInt16 = new Int16Array(bytes.buffer);
+    const buffer = audioContext.createBuffer(1, dataInt16.length, 24000);
+    const channelData = buffer.getChannelData(0);
+    for (let i = 0; i < dataInt16.length; i++) {
+      channelData[i] = dataInt16[i] / 32768.0;
+    }
 
+    const source = audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioContext.destination);
+    source.start();
+  }
+};
+
+export const getMarketTrends = async (products: string[]) => {
+  const prompt = `Research current market trends in Bangladesh for these products: ${products.join(', ')}. Provide demand levels (High, Medium, Low) and reasons.`;
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: prompt,
     config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          summary: { type: Type.STRING },
-          anomalies: { 
-            type: Type.ARRAY, 
-            items: { type: Type.STRING } 
-          },
-          recommendations: { 
-            type: Type.ARRAY, 
-            items: { type: Type.STRING } 
-          },
-          forecast: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                date: { type: Type.STRING },
-                predictedValue: { type: Type.NUMBER }
-              },
-              required: ["date", "predictedValue"]
-            }
-          }
-        },
-        required: ["summary", "anomalies", "recommendations", "forecast"]
-      }
+      tools: [{ googleSearch: {} }]
     }
   });
-
-  // Extract text using the .text property as required by guidelines.
-  const jsonStr = response.text || '{}';
-  return JSON.parse(jsonStr);
-};
-
-export const followUpChat = async (
-  sales: any,
-  interactions: any,
-  question: string,
-  history: { role: 'user' | 'model', text: string }[],
-  language: 'en' | 'bn' = 'en'
-): Promise<string> => {
-  const { salesSummary, interactionSummary } = getContextStrings(sales, interactions);
-  const languageInstruction = language === 'bn' ? "Respond in Bangla." : "Respond in English.";
-
-  const systemInstruction = `You are a SME Business Expert. You have access to this data:
-  Sales: ${salesSummary}
-  Interactions: ${interactionSummary}
-  Answer user questions based strictly on this data and general e-commerce expertise. ${languageInstruction}`;
-
-  // Use ai.chats.create for chat interactions according to guidelines.
-  const chat = ai.chats.create({
-    model: 'gemini-3-flash-preview',
-    config: {
-      systemInstruction,
-    },
-  });
-
-  // Inject history into the chat state.
-  if (history && history.length > 0) {
-    (chat as any).history = history.map(h => ({
-      role: h.role === 'user' ? 'user' : 'model',
-      parts: [{ text: h.text }]
-    }));
-  }
-
-  const response = await chat.sendMessage({ message: question });
-
-  return response.text || "No response generated.";
-};
-
-export const getActionPlan = async (
-  recommendation: string,
-  language: 'en' | 'bn' = 'en'
-): Promise<string> => {
-  const languageInstruction = language === 'bn' ? "Provide the plan in Bangla." : "Provide the plan in English.";
-  
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: `Based on this recommendation: "${recommendation}", provide a 3-step detailed action plan for an SME owner. ${languageInstruction}`,
-  });
-
-  return response.text || "";
+  return response.text;
 };

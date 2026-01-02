@@ -1,51 +1,105 @@
 
+export type Language = 'en' | 'bn';
+
 export interface Product {
   id: string;
   name: string;
   category: string;
   price: number;
   stock: number;
+  isNew?: boolean;
+  demandLevel: 'Low' | 'Medium' | 'High';
+  purchaseFrequency?: number;
 }
 
-export interface SaleRecord {
+export interface Transaction {
   id: string;
-  date: string;
-  amount: number;
-  category: string;
-  customerId: string;
-  productId: string; // Linked to Product.id
+  productId: string;
+  date: string; // ISO string
+  quantity: number;
+  price: number;
 }
 
-export interface InteractionRecord {
+export interface Notification {
   id: string;
+  type: 'low_stock' | 'insight' | 'trend';
+  title: string;
+  message: string;
   timestamp: string;
-  type: 'chat' | 'email' | 'search';
-  sentiment: 'positive' | 'neutral' | 'negative';
-  query: string;
+  read: boolean;
+  link?: string;
+  productId?: string;
 }
 
-export interface DashboardStats {
-  totalRevenue: number;
-  totalOrders: number;
-  avgOrderValue: number;
-  conversionRate: number;
+export interface SalesData {
+  date: string;
+  revenue: number;
+  units: number;
 }
 
-export interface AIAnalysisResult {
-  summary: string;
-  anomalies: string[];
-  recommendations: string[];
-  forecast: {
-    date: string;
-    predictedValue: number;
-  }[];
-}
-
-export interface Alert {
-  id: string;
-  severity: 'high' | 'medium' | 'low';
+export interface AIInsight {
   title: string;
   description: string;
-  timestamp: string;
-  isRead: boolean;
+  actionLabel: string;
+  actionUrl: string;
+  type: 'pricing' | 'inventory' | 'trend';
+}
+
+export interface TranslationSchema {
+  dashboard: string;
+  aiInsights: string;
+  productInventory: string;
+  manageProducts: string;
+  alertCenter: string;
+  businessOverview: string;
+  salesTrend: string;
+  productInsights: string;
+  lowStock: string;
+  highDemand: string;
+  getAiInsights: string;
+  addProductName: string;
+  addCategory: string;
+  addPrice: string;
+  addStock: string;
+  addNewProduct: string;
+  inventoryStatus: string;
+  actions: string;
+  remove: string;
+  uploadInvoice: string;
+  processingInvoice: string;
+  chatbotPlaceholder: string;
+  stockLevel: string;
+  weeklySales: string;
+  stockTurnover: string;
+  lowStockRisk: string;
+  selectProductToView: string;
+  stockLevelHelp: string;
+  weeklySalesHelp: string;
+  stockTurnoverHelp: string;
+  lowStockRiskHelp: string;
+  notifications: string;
+  markAsRead: string;
+  noNotifications: string;
+  totalStockValue: string;
+  totalProducts: string;
+  atRiskItems: string;
+  recentSales: string;
+  takeAction: string;
+  importCsv: string;
+  exportReport: string;
+  exportJson: string;
+  sampleData: string;
+  close: string;
+  analysisResults: string;
+  // Pricing Controls
+  pricingControl: string;
+  currentPrice: string;
+  demand: string;
+  aiRecommendation: string;
+  applyRecommendation: string;
+  saveChanges: string;
+  increasePriceDesc: string;
+  decreasePriceDesc: string;
+  maintainPriceDesc: string;
+  priceUpdated: string;
 }
