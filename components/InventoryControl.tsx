@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Upload, Plus, Trash2, Box, Loader2, Package, Search, FileDown, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, Plus, Trash2, Box, Loader2, Package, Search, FileDown, CheckCircle, AlertCircle, FileSpreadsheet } from 'lucide-react';
 import { Language, Product } from '../types';
 import { translations } from '../i18n';
 import { extractInvoiceData } from '../services/geminiService';
@@ -10,7 +10,7 @@ interface InventoryControlProps {
   products: Product[];
   onAdd: (p: any) => void;
   onRemove: (id: string) => void;
-  onUpload: (items: any[]) => void;
+  onUpload: (data: { products: any[], transactions: any[] }) => void;
 }
 
 export const InventoryControl: React.FC<InventoryControlProps> = ({ lang, products, onAdd, onRemove, onUpload }) => {
@@ -37,7 +37,15 @@ export const InventoryControl: React.FC<InventoryControlProps> = ({ lang, produc
       const base64 = (reader.result as string).split(',')[1];
       try {
         const items = await extractInvoiceData(base64);
-        onUpload(items);
+        onUpload({
+          products: items,
+          transactions: items.map((item: any) => ({
+            productId: item.name,
+            date: new Date().toISOString(),
+            quantity: item.quantity,
+            price: item.price
+          }))
+        });
         showToast(lang === 'en' ? 'Invoice processed successfully!' : 'ইনভয়েস সফলভাবে প্রসেস করা হয়েছে!', 'success');
       } catch (err) {
         showToast(lang === 'en' ? 'Failed to process invoice' : 'ইনভয়েস প্রসেস করতে ব্যর্থ হয়েছে', 'error');
@@ -53,45 +61,71 @@ export const InventoryControl: React.FC<InventoryControlProps> = ({ lang, produc
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
-      const csvData = event.target?.result as string;
-      const lines = csvData.split('\n');
-      const imported: any[] = [];
-      
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].split(',');
-        if (line.length >= 4) {
-          imported.push({
-            name: line[0].trim(),
-            category: line[1].trim(),
-            price: Number(line[2]),
-            quantity: Number(line[3])
+      try {
+        const csvData = event.target?.result as string;
+        const lines = csvData.split('\n').filter(line => line.trim());
+        if (lines.length < 2) throw new Error("Empty CSV");
+
+        const header = lines[0].toLowerCase().split(',').map(h => h.trim());
+        const expected = ["product_id", "product_name", "category", "date", "units_sold", "unit_price"];
+        
+        const isValid = expected.every(col => header.includes(col));
+        if (!isValid) {
+          showToast(t.csvInvalidHeader, 'error');
+          return;
+        }
+
+        const productMap = new Map();
+        const importedTransactions: any[] = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+          const row = lines[i].split(',').map(cell => cell.trim());
+          const data: any = {};
+          header.forEach((h, idx) => data[h] = row[idx]);
+
+          if (!data.product_id || !data.product_name) continue;
+
+          productMap.set(data.product_id, {
+            id: data.product_id,
+            name: data.product_name,
+            category: data.category,
+            price: Number(data.unit_price),
+            stock: 50
+          });
+
+          importedTransactions.push({
+            productId: data.product_id,
+            date: new Date(data.date).toISOString(),
+            quantity: Number(data.units_sold),
+            price: Number(data.unit_price)
           });
         }
-      }
-      
-      if (imported.length > 0) {
-        onUpload(imported);
-        showToast(lang === 'en' ? `Imported ${imported.length} items from CSV` : `CSV থেকে ${imported.length}টি পণ্য ইমপোর্ট করা হয়েছে`, 'success');
-      } else {
-        showToast(lang === 'en' ? 'Invalid CSV structure' : 'CSV ফাইল সঠিক নয়', 'error');
+        
+        onUpload({
+          products: Array.from(productMap.values()),
+          transactions: importedTransactions
+        });
+        showToast(`${t.csvImportSuccess} (${importedTransactions.length} records)`, 'success');
+      } catch (err) {
+        showToast(t.csvParseError, 'error');
       }
     };
     reader.readAsText(file);
   };
 
   const downloadSampleCsv = () => {
-    const headers = "ProductName,Category,Price,Quantity\n";
+    const headers = "product_id,product_name,category,date,units_sold,unit_price\n";
+    const now = new Date();
     const rows = [
-      "Bag 1,Apparel,15,5",
-      "Headphones X,Electronics,45,100",
-      "Local Snacks,Food,2,150",
-      "Anomaly Item,Other,10,2"
+      `1,Smartwatch Pro,Electronics,${now.toISOString().split('T')[0]},12,199`,
+      `2,Coffee Maker Elite,Home,${new Date(now.setDate(now.getDate()-1)).toISOString().split('T')[0]},4,89`,
+      `NEW-01,Handcrafted Candle,Home,${new Date().toISOString().split('T')[0]},15,25`
     ].join('\n');
     const blob = new Blob([headers + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = "tracksmart_sample_inventory.csv";
+    link.download = "tracksmart_sales_activity.csv";
     link.click();
   };
 
@@ -116,7 +150,7 @@ export const InventoryControl: React.FC<InventoryControlProps> = ({ lang, produc
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
         <div>
           <h3 className="text-2xl font-black text-slate-800 tracking-tight">{t.productInventory}</h3>
-          <p className="text-slate-500 mt-1 font-medium">Add products, upload invoices, and manage stock levels.</p>
+          <p className="text-slate-500 mt-1 font-medium">Add products, upload sales CSV, or process invoices.</p>
         </div>
         <div className="flex flex-wrap gap-3 w-full lg:w-auto">
           <button onClick={downloadSampleCsv} className="flex items-center gap-2 px-5 py-3 border border-slate-200 bg-white rounded-xl text-slate-600 font-black hover:bg-slate-50 transition-all text-xs uppercase tracking-widest">
@@ -125,7 +159,7 @@ export const InventoryControl: React.FC<InventoryControlProps> = ({ lang, produc
           </button>
           
           <label className={`cursor-pointer flex items-center justify-center gap-2 px-5 py-3 border border-slate-200 bg-white rounded-xl text-slate-700 font-black hover:bg-slate-50 transition-all text-xs uppercase tracking-widest ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
-            <Upload className="w-4 h-4 text-emerald-600" />
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
             {t.importCsv}
             <input type="file" className="hidden" accept=".csv" onChange={handleCsvImport} />
           </label>
@@ -155,21 +189,21 @@ export const InventoryControl: React.FC<InventoryControlProps> = ({ lang, produc
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="md:col-span-1">
               <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">{t.addProductName}</label>
-              <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold" required />
+              <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-black text-slate-900" required />
             </div>
             <div>
               <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">{t.addCategory}</label>
-              <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold appearance-none">
+              <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-black text-slate-900 appearance-none">
                 <option>Electronics</option><option>Home</option><option>Apparel</option><option>Food</option>
               </select>
             </div>
             <div>
               <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">{t.addPrice}</label>
-              <input type="number" value={formData.price} onChange={e => setFormData({...formData, price: Number(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold" required />
+              <input type="number" value={formData.price} onChange={e => setFormData({...formData, price: Number(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-black text-slate-900" required />
             </div>
             <div>
               <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">{t.addStock}</label>
-              <input type="number" value={formData.stock} onChange={e => setFormData({...formData, stock: Number(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold" required />
+              <input type="number" value={formData.stock} onChange={e => setFormData({...formData, stock: Number(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-black text-slate-900" required />
             </div>
             <div className="md:col-span-4 flex justify-end gap-3 pt-4 border-t border-slate-50">
                <button type="button" onClick={() => setShowAddForm(false)} className="px-6 py-3 font-black text-slate-400 hover:text-slate-600 transition-colors uppercase text-xs tracking-widest">Cancel</button>
@@ -188,7 +222,7 @@ export const InventoryControl: React.FC<InventoryControlProps> = ({ lang, produc
               placeholder="Search items..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+              className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
              />
            </div>
         </div>
@@ -211,7 +245,10 @@ export const InventoryControl: React.FC<InventoryControlProps> = ({ lang, produc
                       <div className="w-10 h-10 bg-white border border-slate-100 rounded-xl flex items-center justify-center shadow-sm">
                         <Package className="w-5 h-5 text-indigo-600" />
                       </div>
-                      <span className="font-black text-slate-800 text-sm tracking-tight">{p.name}</span>
+                      <div>
+                        <span className="font-black text-slate-800 text-sm tracking-tight block">{p.name}</span>
+                        <span className="text-[10px] text-slate-400 font-bold">ID: {p.id}</span>
+                      </div>
                     </div>
                   </td>
                   <td className="px-8 py-4">
@@ -232,7 +269,7 @@ export const InventoryControl: React.FC<InventoryControlProps> = ({ lang, produc
               )) : (
                 <tr>
                   <td colSpan={5} className="px-8 py-16 text-center">
-                    <p className="text-slate-400 font-bold italic">No items found.</p>
+                    <p className="text-slate-400 font-black italic">No items found.</p>
                   </td>
                 </tr>
               )}

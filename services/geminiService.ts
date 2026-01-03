@@ -3,27 +3,103 @@ import { GoogleGenAI, Type, Modality } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+export const getBusinessInsights = async (products: any[], transactions: any[], lang: 'en' | 'bn') => {
+  const salesSummary = transactions.slice(0, 50).map(t => {
+    const p = products.find(prod => prod.id === t.productId);
+    return `${p?.name || 'Item'}: sold ${t.quantity} on ${t.date.split('T')[0]}`;
+  }).join('; ');
+
+  const prompt = `Analyze the following inventory and sales activity for a shop in Bangladesh.
+  Inventory: ${products.map(p => `${p.name} ($${p.price}, ${p.stock} units)`).join(', ')}
+  Recent Activity: ${salesSummary}
+  
+  Provide exactly 2 high-value insights. Format as JSON: [{title: string, description: string, type: "inventory"|"pricing", actionLabel: string, actionUrl: string}].
+  Respond in ${lang === 'bn' ? 'Bangla' : 'English'}. For description, mention specific sales drops or stock spikes if found.`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            description: { type: Type.STRING },
+            type: { type: Type.STRING },
+            actionLabel: { type: Type.STRING },
+            actionUrl: { type: Type.STRING }
+          },
+          required: ["title", "description", "type", "actionLabel", "actionUrl"]
+        }
+      }
+    }
+  });
+
+  return JSON.parse(response.text || "[]");
+};
+
 export const getChatResponse = async (message: string, lang: 'en' | 'bn', context: string) => {
-  const model = ai.models.generateContent({
+  const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: message,
     config: {
-      systemInstruction: `You are a helpful SME business assistant for a shopkeeper in Bangladesh. 
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          text: { type: Type.STRING, description: "A minimalist, 2-sentence max response: [Insight]. [Recommendation]." },
+          actions: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                label: { type: Type.STRING, description: "Button text: e.g. 'Order Product (Qty units)'" },
+                type: { type: Type.STRING, enum: ["order", "view_supplier", "navigate"] },
+                payload: {
+                  type: Type.OBJECT,
+                  properties: {
+                    productId: { type: Type.STRING },
+                    productName: { type: Type.STRING },
+                    quantity: { type: Type.NUMBER },
+                    url: { type: Type.STRING, description: "Direct marketplace URL or search URL (e.g. Daraz/Alibaba)" },
+                    tab: { type: Type.STRING }
+                  }
+                }
+              },
+              required: ["label", "type", "payload"]
+            }
+          }
+        },
+        required: ["text"]
+      },
+      systemInstruction: `You are a minimalist business assistant for a shopkeeper in Bangladesh.
       
-      CURRENT LANGUAGE MODE: ${lang === 'bn' ? 'BANGLA' : 'ENGLISH'}.
-      YOU MUST RESPOND EXCLUSIVELY IN ${lang === 'bn' ? 'BANGLA' : 'ENGLISH'}.
+      STRICT RESPONSE FORMAT:
+      1. One short insight sentence.
+      2. One short recommendation sentence.
+      3. Action buttons (if applicable).
+      NO OTHER TEXT OR EMOJIS.
       
-      CRITICAL GUIDELINES FOR BANGLA:
-      1. Use simple, rural-shopkeeper friendly Bangla (avoid complex academic words).
-      2. For stock queries, use this format: "বর্তমানে আপনার [Product Name] পণ্যের [Count] ইউনিট স্টকে আছে। এই পরিমাণটি [Status] হিসেবে চিহ্নিত করা হয়েছে।"
-      3. For warnings: "সতর্কতা: [Product Name] পণ্যের স্টক প্রায় শেষ। এখন অর্ডার না করলে বিক্রি হারানোর সম্ভাবনা আছে।"
-      4. For health insights: "আপনার ব্যবসায় বর্তমানে ইনভেন্টরি ব্যবস্থাপনায় সমস্যা দেখা যাচ্ছে। পরামর্শ: দ্রুত বিক্রিত পণ্যের জন্য আগাম অর্ডার পরিকল্পনা করুন।"
-      5. Always be proactive and suggest actions like reordering or checking suppliers.
+      ACTION BUTTON RULES:
+      - If stock is low, return an 'order' action.
+      - Use marketplace URLs for 'url':
+        - Daraz: https://www.daraz.com.bd/catalog/?q=[ProductName]
+        - Alibaba: https://www.alibaba.com/trade/search?SearchText=[ProductName]
+      - Labels must be in ${lang === 'bn' ? 'Bangla' : 'English'}.
       
-      Here is the current business context (Inventory Data): ${context}`,
+      CURRENT LANGUAGE: ${lang === 'bn' ? 'BANGLA' : 'ENGLISH'}.
+      Context: ${context}`,
     },
   });
-  return (await model).text;
+  
+  try {
+    return JSON.parse(response.text || '{"text": "I apologize, I could not process that."}');
+  } catch (e) {
+    return { text: response.text || "System Busy." };
+  }
 };
 
 export const extractInvoiceData = async (base64Image: string) => {
@@ -96,16 +172,4 @@ export const generateVoiceInsight = async (text: string, lang: 'en' | 'bn') => {
     source.connect(audioContext.destination);
     source.start();
   }
-};
-
-export const getMarketTrends = async (products: string[]) => {
-  const prompt = `Research current market trends in Bangladesh for these products: ${products.join(', ')}. Provide demand levels (High, Medium, Low) and reasons.`;
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: prompt,
-    config: {
-      tools: [{ googleSearch: {} }]
-    }
-  });
-  return response.text;
 };

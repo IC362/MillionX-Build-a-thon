@@ -22,11 +22,8 @@ export const ManageProducts: React.FC<ManageProductsProps> = ({ lang, products, 
   };
 
   const getPricingLogic = (p: Product, currentPrice: number) => {
-    // Sanity Checks - Extreme changes relative to "standard" base
-    // Note: p.price in state is the "last saved" or initial price.
     const ratio = currentPrice / p.price;
 
-    // 1. Extreme Price Hike Warning
     if (ratio > 2.0) {
       return {
         type: 'warning',
@@ -39,7 +36,6 @@ export const ManageProducts: React.FC<ManageProductsProps> = ({ lang, products, 
       };
     }
 
-    // 2. Extreme Price Drop Warning
     if (ratio < 0.4 && currentPrice > 0) {
       return {
         type: 'warning',
@@ -52,12 +48,11 @@ export const ManageProducts: React.FC<ManageProductsProps> = ({ lang, products, 
       };
     }
 
-    // 3. High Demand / Low Stock logic (Reactive)
     if (p.demandLevel === 'High' && p.stock < 15) {
       if (ratio < 1.05) {
         return {
           type: 'increase',
-          change: 1.1, // Suggesting +10%
+          change: 1.1,
           desc: lang === 'en' 
             ? `Demand is high and stock is low (${p.stock}). Increase price to $${Math.round(p.price * 1.1)} to maximize profit.` 
             : `পণ্যের চাহিদা বেশি এবং স্টক কম (${p.stock})। লাভ বাড়াতে দাম $${Math.round(p.price * 1.1)} এ উন্নীত করুন।`,
@@ -78,12 +73,11 @@ export const ManageProducts: React.FC<ManageProductsProps> = ({ lang, products, 
       }
     }
 
-    // 4. Low Demand / High Stock logic (Reactive)
     if (p.demandLevel === 'Low' && p.stock > 40) {
       if (ratio > 0.95) {
         return {
           type: 'decrease',
-          change: 0.9, // Suggesting -10%
+          change: 0.9,
           desc: lang === 'en' 
             ? `Low demand and high stock (${p.stock}). Reduce price to $${Math.round(p.price * 0.9)} to clear inventory faster.` 
             : `চাহিদা কম এবং স্টক বেশি (${p.stock})। স্টক দ্রুত খালি করতে দাম $${Math.round(p.price * 0.9)} এ কমিয়ে দিন।`,
@@ -104,7 +98,6 @@ export const ManageProducts: React.FC<ManageProductsProps> = ({ lang, products, 
       }
     }
 
-    // Default: Optimal or Neutral
     return {
       type: 'maintain',
       desc: t.maintainPriceDesc,
@@ -184,7 +177,7 @@ export const ManageProducts: React.FC<ManageProductsProps> = ({ lang, products, 
               placeholder="Filter by product name..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+              className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
              />
            </div>
            <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold uppercase tracking-widest">
@@ -255,7 +248,7 @@ export const ManageProducts: React.FC<ManageProductsProps> = ({ lang, products, 
                               type="number" 
                               value={displayPrice}
                               onChange={(e) => handlePriceChange(p.id, e.target.value)}
-                              className={`w-24 pl-6 pr-3 py-2 border rounded-xl font-black text-sm outline-none transition-all ${
+                              className={`w-24 pl-6 pr-3 py-2 border rounded-xl font-black text-sm text-slate-900 outline-none transition-all ${
                                 isEditing ? 'border-indigo-400 ring-2 ring-indigo-50 bg-white shadow-inner' : 'border-slate-200 bg-slate-50 shadow-sm'
                               }`}
                             />

@@ -88,7 +88,7 @@ export const Header: React.FC<HeaderProps> = ({ lang, setLang, title, notificati
                             setShowNotifs(false);
                           }}
                         >
-                          <div className={`mt-1 p-2.5 rounded-xl shrink-0 ${n.type === 'low_stock' ? 'bg-rose-100 text-rose-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                          <div className={`flex items-center justify-center w-10 h-10 rounded-xl shrink-0 ${n.type === 'low_stock' ? 'bg-rose-50 text-rose-500 border border-rose-100' : 'bg-indigo-50 text-indigo-600 border border-indigo-100'}`}>
                             {n.type === 'low_stock' ? <AlertCircle className="w-5 h-5" /> : <Package className="w-5 h-5" />}
                           </div>
                           <div className="flex-1 min-w-0">

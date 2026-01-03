@@ -1,55 +1,45 @@
 
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Loader2, Zap } from 'lucide-react';
-import { Language, Product, AIInsight } from '../types';
+import { Language, Product, Transaction, AIInsight } from '../types';
 import { translations } from '../i18n';
-import { generateVoiceInsight } from '../services/geminiService';
+import { generateVoiceInsight, getBusinessInsights } from '../services/geminiService';
 import { AIModal } from './AIModal';
 
 interface AIInsightsProps {
   lang: Language;
   products: Product[];
+  transactions: Transaction[];
   autoTargetId: string | null;
   onClearTarget: () => void;
 }
 
-export const AIInsights: React.FC<AIInsightsProps> = ({ lang, products, autoTargetId, onClearTarget }) => {
+export const AIInsights: React.FC<AIInsightsProps> = ({ lang, products, transactions, autoTargetId, onClearTarget }) => {
   const t = translations[lang];
   const [insightReport, setInsightReport] = useState<AIInsight[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const runAnalysis = (targetId: string | null = null) => {
+  const runAnalysis = async (targetId: string | null = null) => {
     setLoading(true);
-    const targetProduct = targetId ? products.find(p => p.id === targetId) : null;
-    const lowStockProduct = targetProduct || products.find(p => p.stock < 15);
-    const topProduct = products.sort((a,b) => (b.purchaseFrequency || 0) - (a.purchaseFrequency || 0))[0];
-
-    setTimeout(() => {
-      const insights: AIInsight[] = [
-        {
-          title: lang === 'en' ? "Inventory Optimization" : "স্টক অপ্টিমাইজেশান",
-          description: lang === 'en' 
-            ? `Warning: Stock for ${lowStockProduct?.name || 'inventory'} is nearly finished. Currently ${lowStockProduct?.stock || 0} units left. Order now to avoid losing customers.` 
-            : `সতর্কতা: ${lowStockProduct?.name || 'পণ্যের'} স্টক প্রায় শেষ। বর্তমানে আপনার ${lowStockProduct?.name} পণ্যের ${lowStockProduct?.stock || 0} ইউনিট স্টকে আছে। এখন অর্ডার না করলে বিক্রি হারানোর সম্ভাবনা আছে।`,
-          actionLabel: lang === 'en' ? "Order from Supplier" : "সরবরাহকারীকে কল দিন",
-          actionUrl: `https://www.daraz.com.bd/catalog/?q=${encodeURIComponent(lowStockProduct?.name || 'electronics')}`,
-          type: 'inventory'
-        },
-        {
-          title: lang === 'en' ? "Pricing Comparison" : "মূল্য নির্ধারণ বিশ্লেষণ",
-          description: lang === 'en'
-            ? `Your price for ${topProduct?.name} is $${topProduct?.price}. Local marketplace search for this item is rising. Consider dynamic pricing to boost profits.`
-            : `আপনার ${topProduct?.name} এর দাম $${topProduct?.price}। স্থানীয় বাজারে বর্তমানে এই পণ্যটি জনপ্রিয়। বেশি স্টক রাখলে এবং দাম সমন্বয় করলে লাভের সম্ভাবনা রয়েছে।`,
-          actionLabel: lang === 'en' ? "Check Marketplace" : "মার্কেটপ্লেস যাচাই করুন",
-          actionUrl: `https://bikroy.com/bn/ads/bangladesh?query=${encodeURIComponent(topProduct?.name || 'smartwatch')}`,
-          type: 'pricing'
-        }
-      ];
+    try {
+      // Use the actual business data to generate real insights
+      const insights = await getBusinessInsights(products, transactions, lang);
       setInsightReport(insights);
       setIsModalOpen(true);
+    } catch (err) {
+      console.error("Analysis failed", err);
+      // Fallback simple insight
+      setInsightReport([{
+        title: "System Error",
+        description: "Could not generate insights at this moment.",
+        type: 'inventory',
+        actionLabel: "Try Again",
+        actionUrl: "#"
+      }]);
+    } finally {
       setLoading(false);
-    }, 1500);
+    }
   };
 
   useEffect(() => {
@@ -59,7 +49,7 @@ export const AIInsights: React.FC<AIInsightsProps> = ({ lang, products, autoTarg
   }, [autoTargetId]);
 
   const handleVoicePlay = (text: string) => {
-    const closingPhrase = lang === 'bn' ? " আমি আপনার ব্যবসার ডেটা দেখে এই পরামর্শগুলো দিয়েছি। আপনি চাইলে এখনই পদক্ষেপ নিতে পারেন।" : " I provided these suggestions based on your business data. You can take action now.";
+    const closingPhrase = lang === 'bn' ? " আমি আপনার ব্যবসার ডেটা দেখে এই পরামর্শগুলো দিয়েছি।" : " I provided these suggestions based on your business data.";
     generateVoiceInsight(text + closingPhrase, lang);
   };
 
@@ -83,7 +73,7 @@ export const AIInsights: React.FC<AIInsightsProps> = ({ lang, products, autoTarg
             {loading ? (lang === 'en' ? 'Scanning Business Data...' : 'তথ্য বিশ্লেষণ করা হচ্ছে...') : (lang === 'en' ? 'AI Business Strategist' : 'এআই ব্যবসায়িক কৌশলবিদ')}
           </h3>
           <p className="text-slate-500 max-w-sm mx-auto mt-2 font-medium">
-            Run a full inventory and market trend scan to unlock hidden profit opportunities in your shop.
+            Run a deep scan on your sales history and stock levels to find growth opportunities.
           </p>
         </div>
         {!loading && (
@@ -104,7 +94,7 @@ export const AIInsights: React.FC<AIInsightsProps> = ({ lang, products, autoTarg
         <div>
           <h5 className="font-bold text-indigo-900 text-sm">Actionable Intelligence</h5>
           <p className="text-indigo-700 text-xs mt-1 leading-relaxed font-medium italic">
-            "এই প্রোটোটাইপে আমরা রুল-ভিত্তিক AI ব্যবহার করেছি, কিন্তু আর্কিটেকচার রিয়েল ডেটার জন্য প্রস্তুত।"
+            {lang === 'en' ? "Your actual CSV sales data is now being analyzed by our Gemini engine." : "আপনার CSV থেকে প্রাপ্ত বিক্রয় তথ্য এখন জেমিনি এআই দ্বারা বিশ্লেষণ করা হচ্ছে।"}
           </p>
         </div>
       </div>

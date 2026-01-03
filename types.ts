@@ -1,5 +1,6 @@
 
 export type Language = 'en' | 'bn';
+export type TimeGranularity = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 export interface Product {
   id: string;
@@ -31,18 +32,24 @@ export interface Notification {
   productId?: string;
 }
 
-export interface SalesData {
-  date: string;
-  revenue: number;
-  units: number;
+export interface ChatAction {
+  label: string;
+  type: 'order' | 'view_supplier' | 'navigate';
+  payload: {
+    productId?: string;
+    productName?: string;
+    quantity?: number;
+    url?: string;
+    tab?: string;
+  };
 }
 
-export interface AIInsight {
-  title: string;
-  description: string;
-  actionLabel: string;
-  actionUrl: string;
-  type: 'pricing' | 'inventory' | 'trend';
+export interface ChatMessage {
+  role: 'user' | 'bot';
+  text: string;
+  actions?: ChatAction[];
+  dataCard?: Product;
+  isGreeting?: boolean;
 }
 
 export interface TranslationSchema {
@@ -91,7 +98,6 @@ export interface TranslationSchema {
   sampleData: string;
   close: string;
   analysisResults: string;
-  // Pricing Controls
   pricingControl: string;
   currentPrice: string;
   demand: string;
@@ -102,4 +108,22 @@ export interface TranslationSchema {
   decreasePriceDesc: string;
   maintainPriceDesc: string;
   priceUpdated: string;
+  daily: string;
+  weekly: string;
+  monthly: string;
+  yearly: string;
+  revenueTrend: string;
+  aiGranularityNote: string;
+  csvImportSuccess: string;
+  csvInvalidHeader: string;
+  csvParseError: string;
+  importedProduct: string;
+}
+
+export interface AIInsight {
+  title: string;
+  description: string;
+  actionLabel: string;
+  actionUrl: string;
+  type: 'pricing' | 'inventory' | 'trend';
 }

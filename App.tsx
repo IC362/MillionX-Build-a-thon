@@ -23,15 +23,15 @@ const generateMockTransactions = (products: Product[]): Transaction[] => {
   const transactions: Transaction[] = [];
   const now = new Date();
   products.forEach(p => {
-    const count = Math.floor(Math.random() * 15) + 5;
+    const count = Math.floor(Math.random() * 80) + 40;
     for (let i = 0; i < count; i++) {
       const date = new Date(now);
-      date.setDate(date.getDate() - Math.floor(Math.random() * 30));
+      date.setDate(date.getDate() - Math.floor(Math.random() * 365));
       transactions.push({
         id: Math.random().toString(36).substr(2, 9),
         productId: p.id,
         date: date.toISOString(),
-        quantity: Math.floor(Math.random() * 3) + 1,
+        quantity: Math.floor(Math.random() * 4) + 1,
         price: p.price
       });
     }
@@ -85,8 +85,40 @@ const App: React.FC = () => {
     setProducts(prev => [newProduct, ...prev]);
   };
 
+  const handleBulkUpload = (data: { products: any[], transactions: any[] }) => {
+    // 1. Update/Add Products
+    setProducts(prev => {
+      const next = [...prev];
+      data.products.forEach(imported => {
+        const idx = next.findIndex(p => p.id === imported.id || p.name.toLowerCase() === imported.name.toLowerCase());
+        if (idx >= 0) {
+          next[idx] = { ...next[idx], ...imported };
+        } else {
+          next.push({
+            ...imported,
+            id: imported.id || Math.random().toString(36).substr(2, 9),
+            demandLevel: 'Medium',
+            purchaseFrequency: 0,
+            isNew: true
+          });
+        }
+      });
+      return next;
+    });
+
+    // 2. Add Transactions
+    setTransactions(prev => [
+      ...data.transactions.map(tx => ({
+        ...tx,
+        id: tx.id || Math.random().toString(36).substr(2, 9)
+      })),
+      ...prev
+    ]);
+  };
+
   const removeProduct = (id: string) => {
     setProducts(prev => prev.filter(p => p.id !== id));
+    setTransactions(prev => prev.filter(tx => tx.productId !== id));
   };
 
   const updateProductPrice = (id: string, newPrice: number) => {
@@ -113,15 +145,13 @@ const App: React.FC = () => {
             products={products} 
             onAdd={addProduct} 
             onRemove={removeProduct} 
-            onUpload={(items) => {
-              items.forEach(item => addProduct({ name: item.name, category: item.category, price: item.price, stock: item.quantity }));
-            }} 
+            onUpload={handleBulkUpload} 
           />
         );
       case 'manage':
         return <ManageProducts lang={lang} products={products} onUpdatePrice={updateProductPrice} />;
       case 'insights':
-        return <AIInsights lang={lang} products={products} autoTargetId={targetProductId} onClearTarget={() => setTargetProductId(null)} />;
+        return <AIInsights lang={lang} products={products} transactions={transactions} autoTargetId={targetProductId} onClearTarget={() => setTargetProductId(null)} />;
       case 'alerts':
         return <AlertCenter lang={lang} products={products} onAction={(id) => {
           setTargetProductId(id);
@@ -133,14 +163,14 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900">
+    <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden">
       <Sidebar 
         lang={lang} 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
       />
       
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex flex-col min-w-0 h-full">
         <Header 
           lang={lang} 
           setLang={setLang} 
@@ -151,7 +181,7 @@ const App: React.FC = () => {
           onNotifClick={handleNotificationClick}
         />
         
-        <div className="p-4 md:p-8 overflow-y-auto">
+        <div className="flex-1 p-4 md:p-8 overflow-y-auto bg-slate-50">
           {renderContent()}
         </div>
       </main>
